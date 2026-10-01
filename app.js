@@ -116,6 +116,121 @@ function showToast(msg) { const el=$('toast'); el.textContent=msg; el.classList.
 
 function setupCategories() { $('categoryInput').innerHTML = CATEGORIES.map(c=>`<option>${c}</option>`).join(''); }
 
+async function api(path, options={}) {
+  const response = await fetch(path, {credentials:'same-origin', cache:'no-store', ...options});
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) {
+    const err = new Error(data.error || `HTTP ${response.status}`);
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+async function checkBankStatus() {
+  try {
+    const session = await api('/api/session');
+    if (!session.authenticated) {
+      $('bankStatus').textContent = 'Activation requise';
+      $('bankHelp').textContent = 'Ouvre une fois le lien d’activation privé de Spendline sur cet appareil.';
+      $('connectBankBtn').disabled = true;
+      $('syncBankBtn').disabled = true;
+      return {authenticated:false, configured:session.bridgeConfigured};
+    }
+    $('connectBankBtn').disabled = false;
+    $('syncBankBtn').disabled = false;
+    if (!session.bridgeConfigured) {
+      $('bankStatus').textContent = 'Bridge à configurer';
+      $('bankHelp').textContent = 'Le backend est prêt. Il manque seulement BRIDGE_CLIENT_ID et BRIDGE_CLIENT_SECRET sur Railway.';
+      return {authenticated:true, configured:false, connected:false};
+    }
+    const status = await api('/api/bridge/status');
+    $('bankStatus').textContent = status.connected ? 'Banque connectée' : 'Aucune banque connectée';
+    $('bankHelp').textContent = status.connected
+      ? 'Tes dépenses bancaires sont importées dans Spendline. La synchronisation se fait à l’ouverture et sur demande.'
+      : 'Connecte ton compte une fois via Bridge pour importer automatiquement tes dépenses.';
+    return {authenticated:true, ...status};
+  } catch (err) {
+    $('bankStatus').textContent = 'Backend indisponible';
+    $('bankHelp').textContent = 'Ouvre Spendline depuis son URL Railway pour utiliser la synchronisation bancaire.';
+    $('connectBankBtn').disabled = true;
+    $('syncBankBtn').disabled = true;
+    return {authenticated:false, configured:false, connected:false};
+  }
+}
+
+function ninetyDaysAgo() {
+  const d = new Date();
+  d.setDate(d.getDate() - 90);
+  return localDateISO(d);
+}
+
+async function syncBridge({silent=false}={}) {
+  try {
+    const session = await api('/api/session');
+    if (!session.authenticated || !session.bridgeConfigured) return 0;
+    const since = await getSetting('bridgeSince', '');
+    const qs = new URLSearchParams();
+    if (since) qs.set('since', since);
+    else qs.set('min_date', ninetyDaysAgo());
+
+    if (!silent) $('bankStatus').textContent = 'Synchronisation…';
+    const data = await api('/api/bridge/transactions?' + qs.toString());
+    let changed = 0;
+
+    for (const t of data.resources || []) {
+      const id = `bridge-${t.id}`;
+      if (t.deleted) {
+        await deleteTransaction(id);
+        changed++;
+        continue;
+      }
+      const amount = Number(t.amount);
+      if (!Number.isFinite(amount) || amount >= 0 || t.future) continue;
+      const date = t.transaction_date || t.date || t.booking_date;
+      if (!date) continue;
+      const merchant = String(t.clean_description || t.provider_description || 'Transaction bancaire').trim();
+      await putTransaction({
+        id,
+        amount: Math.abs(amount),
+        merchant,
+        date: String(date).slice(0,10),
+        category: inferCategory(merchant),
+        note: t.operation_type ? `Bridge · ${t.operation_type}` : 'Bridge',
+        source: 'bridge',
+        createdAt: t.updated_at ? Date.parse(t.updated_at) || Date.now() : Date.now(),
+        fingerprint: `bridge:${t.id}`,
+        bridgeUpdatedAt: t.updated_at || null,
+        operationType: t.operation_type || null
+      });
+      changed++;
+    }
+
+    if (data.max_updated_at) await setSetting('bridgeSince', data.max_updated_at);
+    await setSetting('lastBridgeSync', new Date().toISOString());
+    await refresh();
+    const last = await getSetting('lastBridgeSync', '');
+    $('lastBankSync').textContent = last ? 'Dernière synchro : ' + new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'}).format(new Date(last)) : '';
+    if (!silent) showToast(changed ? `${changed} opération(s) synchronisée(s)` : 'Déjà à jour');
+    await checkBankStatus();
+    return changed;
+  } catch (err) {
+    if (!silent) showToast(err.status===401 ? 'Active d’abord cette installation de Spendline' : 'Synchronisation bancaire impossible');
+    return 0;
+  }
+}
+
+async function initBank() {
+  const savedEmail = localStorage.getItem('spendlineBridgeEmail') || '';
+  $('bankEmailInput').value = savedEmail;
+  const last = await getSetting('lastBridgeSync', '');
+  $('lastBankSync').textContent = last ? 'Dernière synchro : ' + new Intl.DateTimeFormat('fr-FR',{hour:'2-digit',minute:'2-digit'}).format(new Date(last)) : '';
+  const status = await checkBankStatus();
+  if (status.authenticated && status.configured && status.connected) await syncBridge({silent:true});
+}
+
+
 function parseCsvLine(line, sep) {
   const cells=[]; let cur=''; let quoted=false;
   for(let i=0;i<line.length;i++){ const c=line[i]; if(c==='"'){ if(quoted&&line[i+1]==='"'){cur+='"';i++;} else quoted=!quoted; } else if(c===sep&&!quoted){cells.push(cur);cur='';} else cur+=c; }
@@ -164,6 +279,29 @@ $('confirmImportBtn').addEventListener('click',async()=>{ const added=await addM
 $('exportBtn').addEventListener('click',async()=>{ const payload={version:1,exportedAt:new Date().toISOString(),settings:{monthlyBudget:await getSetting('monthlyBudget',0)},transactions}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`spendline-${localDateISO()}.json`;a.click();URL.revokeObjectURL(a.href); });
 $('restoreBtn').addEventListener('click',()=>$('jsonFileInput').click());
 $('jsonFileInput').addEventListener('change',async(e)=>{ const file=e.target.files[0]; if(!file)return; try{const data=JSON.parse(await file.text()); if(!Array.isArray(data.transactions))throw new Error(); await clearTransactions(); await addManyTransactions(data.transactions); if(data.settings?.monthlyBudget!=null)await setSetting('monthlyBudget',data.settings.monthlyBudget); await refresh();showToast('Sauvegarde restaurée');}catch{showToast('Fichier de sauvegarde invalide');}finally{e.target.value='';} });
+
+$('connectBankBtn').addEventListener('click', async () => {
+  const email = $('bankEmailInput').value.trim();
+  if (!email) return showToast('Entre ton e-mail pour la connexion bancaire');
+  localStorage.setItem('spendlineBridgeEmail', email);
+  try {
+    $('connectBankBtn').disabled = true;
+    $('bankStatus').textContent = 'Ouverture de Bridge…';
+    const session = await api('/api/bridge/connect', {
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({email})
+    });
+    window.location.href = session.url;
+  } catch (err) {
+    $('connectBankBtn').disabled = false;
+    showToast(err.status===503 ? 'Configure d’abord Bridge sur Railway' : 'Impossible d’ouvrir Bridge');
+    await checkBankStatus();
+  }
+});
+$('syncBankBtn').addEventListener('click',()=>syncBridge());
+$('bankEmailInput').addEventListener('change',()=>localStorage.setItem('spendlineBridgeEmail',$('bankEmailInput').value.trim()));
+
 $('demoBtn').addEventListener('click',async()=>{ const names=[['Bio c’ Bon',18.42],['RATP',2.15],['Boulangerie',6.8],['Monoprix',32.7],['Cinéma',13.5],['Café',4.2],['Pharmacie',9.9]]; const rows=names.map((x,i)=>{const d=new Date();d.setDate(d.getDate()-i*2);return makeRow({amount:x[1],merchant:x[0],date:localDateISO(d),category:inferCategory(x[0]),source:'demo'});}); const n=await addManyTransactions(rows);await refresh();showToast(`${n} exemple(s) ajouté(s)`); });
 window.addEventListener('resize',()=>requestAnimationFrame(drawChart));
 window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();deferredInstallPrompt=e;$('installBtn').classList.remove('hidden');});
@@ -171,3 +309,5 @@ $('installBtn').addEventListener('click',async()=>{if(!deferredInstallPrompt)ret
 if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
 setupCategories();
 await refresh();
+await initBank();
+setInterval(()=>syncBridge({silent:true}), 5*60*1000);
