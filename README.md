@@ -1,36 +1,75 @@
-# Gestion de dépenses quotidiennes
+# Gestion de dépenses quotidiennes — Spendline
 
-PWA installable pour suivre ses dépenses, son budget mensuel et l'évolution de ses dépenses au quotidien.
+PWA installable pour suivre automatiquement ses dépenses bancaires, son budget mensuel et son rythme de dépense.
+
+## Architecture
+
+```
+Fairphone / PWA Spendline
+        ↓ HTTPS
+Backend Node sur Railway
+        ↓
+Bridge API
+        ↓
+Banque
+```
+
+La PWA et l'API sont servies par le même service Railway. Les identifiants Bridge ne sont jamais envoyés au navigateur.
 
 ## Fonctionnalités
 
-- ajout et suppression de dépenses
-- stockage local avec IndexedDB
-- budget mensuel et reste disponible
-- dépenses du jour, des 7 derniers jours et du mois
-- moyenne journalière et projection de fin de mois
+- connexion bancaire via Bridge Connect
+- synchronisation automatique des dépenses à l'ouverture
+- synchronisation incrémentale avec le champ `updated_at`
+- synchronisation toutes les 5 minutes lorsque l'application reste ouverte
+- import des débits bancaires, avec mise à jour et suppression des opérations modifiées
+- ajout manuel et import CSV en secours
+- stockage local IndexedDB
+- budget mensuel, reste disponible et projection de fin de mois
 - graphique des 30 derniers jours
-- import CSV bancaire avec déduplication
-- export et restauration JSON
-- fonctionnement hors ligne grâce au service worker
-- installable comme PWA sur Android
+- export/restauration JSON
+- fonctionnement hors ligne pour les données déjà synchronisées
+- PWA installable sur Android
 
-## Données
+## Sécurité
 
-Les données restent dans le navigateur de l'appareil. Cette version ne contourne pas les protections de Lyf Pay et ne lit pas le stockage privé d'une autre application Android.
+Le backend utilise un lien d'activation privé. Une fois ce lien ouvert sur un appareil, un cookie `HttpOnly`, `Secure` et `SameSite=Lax` autorise l'accès aux routes bancaires.
 
-L'architecture permet d'ajouter ultérieurement un fournisseur bancaire/open-banking ou une autre source autorisée.
+Variables Railway nécessaires :
+
+```
+SPENDLINE_SETUP_TOKEN
+SPENDLINE_SESSION_SECRET
+BRIDGE_CLIENT_ID
+BRIDGE_CLIENT_SECRET
+PUBLIC_APP_URL
+BRIDGE_CALLBACK_URL
+BRIDGE_WEBHOOK_SECRET       # optionnel jusqu'à configuration du webhook
+BRIDGE_EXTERNAL_USER_ID     # optionnel, défaut: spendline-owner
+```
+
+Les réponses `/api/*` sont exclues du cache du service worker.
+
+## Bridge
+
+Version d'API utilisée : `2025-01-15`.
+
+Le backend crée automatiquement l'utilisateur Bridge associé à `BRIDGE_EXTERNAL_USER_ID`, génère un token utilisateur à la demande et crée les sessions Bridge Connect.
+
+Les transactions sont récupérées depuis :
+
+```
+GET /v3/aggregation/transactions
+```
+
+La première synchronisation importe 90 jours. Les suivantes utilisent `since` avec le dernier `updated_at` connu.
 
 ## Lancer en local
 
-Un serveur HTTP est recommandé pour tester correctement le service worker :
-
 ```bash
-python3 -m http.server 8080
+npm start
 ```
 
-Puis ouvrir `http://localhost:8080`.
+Puis ouvrir `http://localhost:3000`.
 
-## Déploiement
-
-Le dépôt contient un workflow GitHub Pages. Dans **Settings → Pages**, sélectionner **GitHub Actions** comme source.
+Sans identifiants Bridge, toute l'interface locale continue de fonctionner ; seule la synchronisation bancaire reste désactivée.
