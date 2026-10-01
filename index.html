@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0f1115" />
-  <meta name="description" content="Suivi local et hors-ligne de tes dépenses." />
+  <meta name="description" content="Suivi automatique et local de tes dépenses." />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" href="./icons/icon-192.png" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
@@ -50,6 +50,22 @@
       <div class="chart-wrap"><canvas id="spendChart" aria-label="Dépenses quotidiennes sur 30 jours"></canvas></div>
     </section>
 
+    <section class="card tools-card">
+      <div class="section-head">
+        <div><p class="eyebrow">Synchronisation bancaire</p><h2>Bridge</h2></div>
+        <span class="muted" id="bankStatus">Vérification…</span>
+      </div>
+      <p class="muted" id="bankHelp">Connecte ton compte une fois. Les nouvelles dépenses bancaires seront ensuite importées automatiquement quand Spendline se synchronise.</p>
+      <label id="bankEmailLabel">E-mail utilisé pour la connexion bancaire
+        <input id="bankEmailInput" type="email" autocomplete="email" placeholder="toi@exemple.fr" />
+      </label>
+      <div class="actions wrap">
+        <button id="connectBankBtn" class="primary" type="button">Connecter ma banque</button>
+        <button id="syncBankBtn" class="ghost" type="button">Synchroniser maintenant</button>
+      </div>
+      <span class="muted" id="lastBankSync"></span>
+    </section>
+
     <section class="card">
       <div class="section-head actions-head">
         <div><p class="eyebrow">Historique</p><h2>Transactions</h2></div>
@@ -71,13 +87,13 @@
       <div id="transactionList" class="transaction-list"></div>
       <div id="emptyState" class="empty hidden">
         <strong>Aucune dépense</strong>
-        <p>Ajoute une transaction ou importe un export CSV de ta banque.</p>
+        <p>Connecte ta banque, ajoute une transaction ou importe un CSV.</p>
       </div>
     </section>
 
     <section class="card tools-card">
       <div><p class="eyebrow">Données</p><h2>Sauvegarde locale</h2></div>
-      <p class="muted">Les données restent dans IndexedDB sur cet appareil. Tu peux exporter une sauvegarde JSON à tout moment.</p>
+      <p class="muted">Les dépenses sont conservées dans IndexedDB sur cet appareil. Les identifiants Bridge restent uniquement côté serveur Railway.</p>
       <div class="actions wrap">
         <button id="exportBtn" class="ghost" type="button">Exporter JSON</button>
         <button id="restoreBtn" class="ghost" type="button">Restaurer JSON</button>
