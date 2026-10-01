@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1115" />
+  <meta name="description" content="Suivi local et hors-ligne de tes dépenses." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>Spendline</title>
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Budget personnel</p>
+      <h1>Spendline</h1>
+    </div>
+    <button id="installBtn" class="ghost hidden" type="button">Installer</button>
+  </header>
+
+  <main>
+    <section class="hero card">
+      <div class="hero-copy">
+        <p class="muted" id="monthLabel">Ce mois</p>
+        <div class="amount" id="monthSpent">0,00 €</div>
+        <div class="budget-line">
+          <span id="budgetRemaining">Aucun budget défini</span>
+          <button id="editBudgetBtn" class="text-button" type="button">Modifier</button>
+        </div>
+      </div>
+      <div class="progress-track" aria-label="Progression du budget">
+        <div id="budgetProgress" class="progress-value"></div>
+      </div>
+    </section>
+
+    <section class="stats-grid">
+      <article class="stat card"><span>Aujourd'hui</span><strong id="todaySpent">0,00 €</strong></article>
+      <article class="stat card"><span>7 jours</span><strong id="weekSpent">0,00 €</strong></article>
+      <article class="stat card"><span>Moyenne / jour</span><strong id="dailyAverage">0,00 €</strong></article>
+      <article class="stat card"><span>Projection mois</span><strong id="monthProjection">0,00 €</strong></article>
+    </section>
+
+    <section class="card chart-card">
+      <div class="section-head">
+        <div><p class="eyebrow">30 derniers jours</p><h2>Rythme de dépense</h2></div>
+        <span class="muted" id="chartTotal"></span>
+      </div>
+      <div class="chart-wrap"><canvas id="spendChart" aria-label="Dépenses quotidiennes sur 30 jours"></canvas></div>
+    </section>
+
+    <section class="card">
+      <div class="section-head actions-head">
+        <div><p class="eyebrow">Historique</p><h2>Transactions</h2></div>
+        <div class="actions">
+          <button id="importBtn" class="ghost" type="button">Importer CSV</button>
+          <button id="addBtn" class="primary" type="button">+ Ajouter</button>
+        </div>
+      </div>
+
+      <div class="filters">
+        <input id="searchInput" type="search" placeholder="Rechercher un commerçant…" autocomplete="off" />
+        <select id="rangeSelect" aria-label="Période">
+          <option value="month">Ce mois</option>
+          <option value="30">30 jours</option>
+          <option value="all">Tout</option>
+        </select>
+      </div>
+
+      <div id="transactionList" class="transaction-list"></div>
+      <div id="emptyState" class="empty hidden">
+        <strong>Aucune dépense</strong>
+        <p>Ajoute une transaction ou importe un export CSV de ta banque.</p>
+      </div>
+    </section>
+
+    <section class="card tools-card">
+      <div><p class="eyebrow">Données</p><h2>Sauvegarde locale</h2></div>
+      <p class="muted">Les données restent dans IndexedDB sur cet appareil. Tu peux exporter une sauvegarde JSON à tout moment.</p>
+      <div class="actions wrap">
+        <button id="exportBtn" class="ghost" type="button">Exporter JSON</button>
+        <button id="restoreBtn" class="ghost" type="button">Restaurer JSON</button>
+        <button id="demoBtn" class="ghost" type="button">Ajouter des données de démo</button>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="transactionDialog">
+    <form id="transactionForm" method="dialog">
+      <div class="dialog-head"><h2>Ajouter une dépense</h2><button class="icon-button" value="cancel" aria-label="Fermer">×</button></div>
+      <label>Montant (€)<input id="amountInput" inputmode="decimal" placeholder="12,50" required /></label>
+      <label>Commerçant<input id="merchantInput" placeholder="Ex. Bio c' Bon" required /></label>
+      <label>Date<input id="dateInput" type="date" required /></label>
+      <label>Catégorie<select id="categoryInput"></select></label>
+      <label>Note<input id="noteInput" placeholder="Optionnel" /></label>
+      <button class="primary wide" type="submit">Enregistrer</button>
+    </form>
+  </dialog>
+
+  <dialog id="budgetDialog">
+    <form id="budgetForm" method="dialog">
+      <div class="dialog-head"><h2>Budget mensuel</h2><button class="icon-button" value="cancel" aria-label="Fermer">×</button></div>
+      <label>Budget (€)<input id="budgetInput" inputmode="decimal" placeholder="800" required /></label>
+      <button class="primary wide" type="submit">Enregistrer</button>
+    </form>
+  </dialog>
+
+  <dialog id="importDialog">
+    <form method="dialog">
+      <div class="dialog-head"><h2>Importer un CSV</h2><button class="icon-button" value="cancel" aria-label="Fermer">×</button></div>
+      <p class="muted">Spendline détecte automatiquement les colonnes courantes : date, montant/débit, libellé/commerçant. Les doublons sont ignorés.</p>
+      <input id="csvFileInput" type="file" accept=".csv,text/csv,text/plain" />
+      <div id="importPreview" class="import-preview"></div>
+      <button id="confirmImportBtn" class="primary wide" type="button" disabled>Importer</button>
+    </form>
+  </dialog>
+
+  <input id="jsonFileInput" class="hidden" type="file" accept="application/json,.json" />
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
